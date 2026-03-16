@@ -4,7 +4,14 @@ import argparse
 import json
 from datetime import datetime
 
-from .analytics import build_daily_trend, build_summary, summarize_projects, top_sessions
+from .analytics import (
+    build_daily_trend,
+    build_summary,
+    summarize_projects,
+    top_sessions,
+    usage_from_events,
+    usage_from_session_events,
+)
 from .datasource import load_threads, load_token_events
 from .models import ThreadRecord, TokenEvent
 from .presenters import (
@@ -24,15 +31,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("summary", help="Show global usage summary.")
+    summary_parser = subparsers.add_parser("summary", help="Show global usage summary.")
+    summary_parser.add_argument("--days", type=int, default=7, help="Custom summary window in days.")
 
     top_parser = subparsers.add_parser("top", help="Show highest-consumption sessions.")
     top_parser.add_argument("--limit", type=int, default=10)
 
-    subparsers.add_parser("projects", help="Show token usage grouped by cwd.")
+    projects_parser = subparsers.add_parser("projects", help="Show token usage grouped by cwd.")
+    projects_parser.add_argument("--limit", type=int, default=20)
 
     project_parser = subparsers.add_parser("project", help="Show sessions for a specific cwd.")
-    project_parser.add_argument("path", help="Exact cwd path to inspect.")
+    project_parser.add_argument("path", help="Project path or unique substring to inspect.")
     project_parser.add_argument("--limit", type=int, default=20)
 
     trend_parser = subparsers.add_parser("trend", help="Show daily token trend.")
@@ -57,6 +66,19 @@ def _print_json(value: object) -> None:
 
 def _filter_threads_by_project(threads: list[ThreadRecord], path: str) -> list[ThreadRecord]:
     return [thread for thread in threads if thread.cwd == path]
+
+
+def _resolve_project_path(threads: list[ThreadRecord], path_query: str) -> tuple[str | None, list[str]]:
+    all_paths = sorted({thread.cwd for thread in threads})
+    exact_matches = [path for path in all_paths if path == path_query]
+    if exact_matches:
+        return exact_matches[0], exact_matches
+
+    lowered = path_query.lower()
+    contains_matches = [path for path in all_paths if lowered in path.lower()]
+    if len(contains_matches) == 1:
+        return contains_matches[0], contains_matches
+    return None, contains_matches
 
 
 def _resolve_session(threads: list[ThreadRecord], session_id: str) -> ThreadRecord | None:
@@ -97,11 +119,12 @@ def main(argv: list[str] | None = None) -> int:
 
     threads = load_threads(args.codex_home)
     if args.command == "summary":
-        summary = build_summary(threads)
+        token_events = load_token_events(args.codex_home)
+        summary = build_summary(threads, token_events=token_events, days=max(args.days, 1))
         if args.as_json:
             _print_json(summary)
             return 0
-        trend_rows = build_daily_trend(threads, [], days=7)
+        trend_rows = build_daily_trend(threads, [], days=max(args.days, 1))
         print_summary_view(console, summary, trend_rows)
         return 0
 
@@ -134,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "projects":
-        rows = summarize_projects(threads)
+        rows = summarize_projects(threads)[: max(args.limit, 1)]
         if args.as_json:
             _print_json(rows)
             return 0
@@ -152,8 +175,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "project":
-        project_threads = _filter_threads_by_project(threads, args.path)
-        summary = build_summary(project_threads)
+        resolved_path, candidates = _resolve_project_path(threads, args.path)
+        if resolved_path is None:
+            if not candidates:
+                parser.error(f"Project not found: {args.path}")
+            parser.error(
+                "Project path is not unique: "
+                f"{args.path}. Matches: {', '.join(candidates[:10])}"
+            )
+
+        project_threads = _filter_threads_by_project(threads, resolved_path)
+        token_events = load_token_events(args.codex_home)
+        project_session_ids = {thread.session_id for thread in project_threads}
+        project_events = [event for event in token_events if event.session_id in project_session_ids]
+        usage = usage_from_events(project_events)
+        summary = build_summary(project_threads, token_events=project_events)
         rows = [
             {
                 "session_id": item.session_id,
@@ -164,9 +200,9 @@ def main(argv: list[str] | None = None) -> int:
             for item in top_sessions(project_threads, limit=max(args.limit, 1))
         ]
         if args.as_json:
-            _print_json({"path": args.path, "summary": summary, "sessions": rows})
+            _print_json({"path": resolved_path, "summary": summary, "usage": usage, "sessions": rows})
             return 0
-        print_project_view(console, args.path, summary, rows)
+        print_project_view(console, resolved_path, summary, usage, rows)
         return 0
 
     if args.command == "trend":
@@ -186,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         token_events = load_token_events(args.codex_home)
         session_events = [event for event in token_events if event.session_id == thread.session_id]
         event_rows = _session_event_rows(session_events, limit=max(args.events, 1))
+        usage = usage_from_session_events(session_events)
 
         payload = {
             "session": {
@@ -197,12 +234,13 @@ def main(argv: list[str] | None = None) -> int:
                 "updated_at": thread.updated_at,
                 "tokens_used": thread.tokens_used,
             },
+            "usage": usage,
             "token_events": event_rows,
         }
         if args.as_json:
             _print_json(payload)
             return 0
-        print_session_view(console, payload["session"], event_rows, len(session_events))
+        print_session_view(console, payload["session"], payload["usage"], event_rows, len(session_events))
         return 0
 
     parser.error(f"Unknown command: {args.command}")

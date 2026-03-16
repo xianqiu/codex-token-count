@@ -8,6 +8,7 @@
 - 哪些本地项目最耗 token
 - 哪些 session 消耗最高
 - 最近 7 天或 30 天的使用趋势如何
+- input、output、cached input、reasoning output 分别是多少
 
 这个工具直接读取你本机已有的 Codex 数据，不会上传数据，也不会额外保存一份统计数据库。
 
@@ -79,6 +80,11 @@ codex-token trend --days 30
 
 - `state_5.sqlite`：用于读取 session 级别的总量统计
 - `sessions/**/*.jsonl`：用于读取更细的 token 事件和趋势数据
+
+补充说明：
+
+- `cached input` 已经包含在 `input tokens` 中
+- `reasoning output` 已经包含在 `output tokens` 中
 
 如果你想读取别的 Codex 数据目录，可以手动指定：
 

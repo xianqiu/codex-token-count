@@ -17,9 +17,26 @@ class CliTests(unittest.TestCase):
             output = run_cli(tmp_path, "project", "/repo/a")
             self.assertIn("Project Detail", output)
             self.assertIn("/repo/a", output)
+            self.assertIn("Breakdown", output)
+            self.assertIn("Cached Input", output)
             self.assertIn("sess-001", output)
             self.assertIn("sess-002", output)
             self.assertNotIn("sess-003", output)
+
+    def test_projects_command_limit(self) -> None:
+        with tempfile_directory() as tmp_path:
+            build_codex_fixture(tmp_path)
+            output = run_cli(tmp_path, "--json", "projects", "--limit", "1")
+            payload = json.loads(output)
+            self.assertEqual(len(payload), 1)
+
+    def test_project_command_supports_unique_substring_match(self) -> None:
+        with tempfile_directory() as tmp_path:
+            build_codex_fixture(tmp_path)
+            output = run_cli(tmp_path, "--json", "project", "repo/b")
+            payload = json.loads(output)
+            self.assertEqual(payload["path"], "/repo/b")
+            self.assertEqual(len(payload["sessions"]), 1)
 
     def test_session_command_supports_prefix_and_shows_events(self) -> None:
         with tempfile_directory() as tmp_path:
@@ -36,7 +53,39 @@ class CliTests(unittest.TestCase):
             output = run_cli(tmp_path, "--json", "session", "sess-002")
             payload = json.loads(output)
             self.assertEqual(payload["session"]["session_id"], "sess-002")
+            self.assertEqual(payload["usage"]["input_tokens"], 15)
+            self.assertEqual(payload["usage"]["output_tokens"], 5)
             self.assertEqual(len(payload["token_events"]), 1)
+
+    def test_summary_command_json_includes_breakdown(self) -> None:
+        with tempfile_directory() as tmp_path:
+            build_codex_fixture(tmp_path)
+            output = run_cli(tmp_path, "--json", "summary")
+            payload = json.loads(output)
+            self.assertEqual(payload["window_days"], 7)
+            self.assertIn("tokens_in_window", payload)
+            self.assertEqual(payload["input_tokens"], 35)
+            self.assertEqual(payload["cached_input_tokens"], 0)
+            self.assertEqual(payload["output_tokens"], 12)
+            self.assertEqual(payload["reasoning_output_tokens"], 0)
+
+    def test_summary_command_respects_days(self) -> None:
+        with tempfile_directory() as tmp_path:
+            build_codex_fixture(tmp_path)
+            output = run_cli(tmp_path, "--json", "summary", "--days", "1000")
+            payload = json.loads(output)
+            self.assertEqual(payload["window_days"], 1000)
+            self.assertEqual(payload["tokens_in_window"], 90)
+
+    def test_project_command_json_includes_breakdown(self) -> None:
+        with tempfile_directory() as tmp_path:
+            build_codex_fixture(tmp_path)
+            output = run_cli(tmp_path, "--json", "project", "/repo/a")
+            payload = json.loads(output)
+            self.assertEqual(payload["usage"]["input_tokens"], 35)
+            self.assertEqual(payload["usage"]["cached_input_tokens"], 0)
+            self.assertEqual(payload["usage"]["output_tokens"], 12)
+            self.assertEqual(payload["usage"]["reasoning_output_tokens"], 0)
 
 
 def run_cli(codex_home: Path, *args: str) -> str:

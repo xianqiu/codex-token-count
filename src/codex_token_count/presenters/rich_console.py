@@ -61,11 +61,61 @@ def _sparkline(values: list[int]) -> str:
     return "".join(result)
 
 
+def _fmt_percent(numerator: int, denominator: int) -> str:
+    if denominator <= 0:
+        return "0.0%"
+    return f"{(numerator / denominator) * 100:.1f}%"
+
+
+def _input_breakdown_rows(input_tokens: int, cached_input_tokens: int) -> list[tuple[str, str]]:
+    non_cached_input_tokens = max(input_tokens - cached_input_tokens, 0)
+    return [
+        ("Input Tokens", _fmt_value(input_tokens)),
+        (
+            "  - Cached Input",
+            f"{_fmt_value(cached_input_tokens)} ({_fmt_percent(cached_input_tokens, input_tokens)})",
+        ),
+        (
+            "  - Non-cached Input",
+            f"{_fmt_value(non_cached_input_tokens)} ({_fmt_percent(non_cached_input_tokens, input_tokens)})",
+        ),
+    ]
+
+
+def _output_breakdown_rows(output_tokens: int, reasoning_output_tokens: int) -> list[tuple[str, str]]:
+    non_reasoning_output_tokens = max(output_tokens - reasoning_output_tokens, 0)
+    return [
+        ("Output Tokens", _fmt_value(output_tokens)),
+        (
+            "  - Reasoning Output",
+            f"{_fmt_value(reasoning_output_tokens)} ({_fmt_percent(reasoning_output_tokens, output_tokens)})",
+        ),
+        (
+            "  - Non-reasoning Output",
+            f"{_fmt_value(non_reasoning_output_tokens)} ({_fmt_percent(non_reasoning_output_tokens, output_tokens)})",
+        ),
+    ]
+
+
+def _build_breakdown_panel(input_tokens: int, cached_input_tokens: int, output_tokens: int, reasoning_output_tokens: int) -> Panel:
+    breakdown = Table.grid(expand=True, padding=(0, 3))
+    breakdown.add_column(style="bold cyan")
+    breakdown.add_column(justify="right", style="magenta")
+    input_rows = _input_breakdown_rows(input_tokens, cached_input_tokens)
+    output_rows = _output_breakdown_rows(output_tokens, reasoning_output_tokens)
+    for label, value in input_rows:
+        breakdown.add_row(label, value)
+    breakdown.add_row("", "")
+    for label, value in output_rows:
+        breakdown.add_row(label, value)
+    return Panel(breakdown, title="Breakdown", box=SIMPLE_HEAVY)
+
+
 def print_summary_view(console: Console, summary: dict[str, object], trend_rows: list[dict[str, object]]) -> None:
     kpis = [
         ("Sessions", summary["total_sessions"], "cyan"),
         ("Total Tokens", summary["total_tokens"], "magenta"),
-        ("7-Day Tokens", summary["tokens_last_7_days"], "yellow"),
+        (f"{summary['window_days']}-Day Tokens", summary["tokens_in_window"], "yellow"),
         ("30-Day Tokens", summary["tokens_last_30_days"], "green"),
     ]
     panels = [
@@ -102,8 +152,14 @@ def print_summary_view(console: Console, summary: dict[str, object], trend_rows:
             box=SIMPLE_HEAVY,
         )
     )
-    if trend_values:
-        console.print(f"[dim]7-day shape[/dim]  {_sparkline(trend_values[-7:])}")
+    console.print(
+        _build_breakdown_panel(
+            int(summary["input_tokens"]),
+            int(summary["cached_input_tokens"]),
+            int(summary["output_tokens"]),
+            int(summary["reasoning_output_tokens"]),
+        )
+    )
 
 
 def print_rows_table(
@@ -132,6 +188,7 @@ def print_project_view(
     console: Console,
     path: str,
     summary: dict[str, object],
+    usage: dict[str, int],
     rows: list[dict[str, object]],
 ) -> None:
     meta = Table.grid(padding=(0, 2))
@@ -142,6 +199,14 @@ def print_project_view(
     meta.add_row("Total tokens", _fmt_value(summary["total_tokens"]))
     meta.add_row("Last updated", _fmt_datetime(summary["last_updated_at"]))
     console.print(Panel(meta, title="Project Detail", box=SIMPLE_HEAVY))
+    console.print(
+        _build_breakdown_panel(
+            usage["input_tokens"],
+            usage["cached_input_tokens"],
+            usage["output_tokens"],
+            usage["reasoning_output_tokens"],
+        )
+    )
     if rows:
         print_rows_table(
             console,
@@ -159,6 +224,7 @@ def print_project_view(
 def print_session_view(
     console: Console,
     session: dict[str, object],
+    usage: dict[str, int],
     event_rows: list[dict[str, object]],
     event_count: int,
 ) -> None:
@@ -174,6 +240,14 @@ def print_session_view(
     meta.add_row("Tokens", _fmt_value(session["tokens_used"]))
     meta.add_row("Events", _fmt_int(event_count))
     console.print(Panel(meta, title="Session Detail", box=SIMPLE_HEAVY))
+    console.print(
+        _build_breakdown_panel(
+            usage["input_tokens"],
+            usage["cached_input_tokens"],
+            usage["output_tokens"],
+            usage["reasoning_output_tokens"],
+        )
+    )
     if event_rows:
         print_rows_table(
             console,
@@ -193,4 +267,3 @@ def print_session_view(
 
 def print_trend_view(console: Console, rows: list[dict[str, object]]) -> None:
     print_rows_table(console, rows, [("date", "Date"), ("tokens", "Tokens")], title="Daily Trend")
-    console.print(f"[dim]shape[/dim]  {_sparkline([int(row['tokens']) for row in rows])}")
