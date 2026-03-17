@@ -50,6 +50,49 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(rows[0].session_id, "abc")
             self.assertEqual(rows[0].tokens_used, 123)
 
+    def test_read_threads_excludes_archived_by_default(self) -> None:
+        with self.subTest("archived"), tempfile_directory() as tmp_path:
+            db_path = tmp_path / "state_5.sqlite"
+            connection = sqlite3.connect(db_path)
+            try:
+                connection.execute(
+                    """
+                    CREATE TABLE threads (
+                      id TEXT PRIMARY KEY,
+                      rollout_path TEXT NOT NULL,
+                      created_at INTEGER NOT NULL,
+                      updated_at INTEGER NOT NULL,
+                      source TEXT NOT NULL,
+                      model_provider TEXT NOT NULL,
+                      cwd TEXT NOT NULL,
+                      title TEXT NOT NULL,
+                      sandbox_policy TEXT NOT NULL,
+                      approval_mode TEXT NOT NULL,
+                      tokens_used INTEGER NOT NULL DEFAULT 0,
+                      has_user_event INTEGER NOT NULL DEFAULT 0,
+                      archived INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO threads
+                      (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode, tokens_used, has_user_event, archived)
+                    VALUES
+                      (?, 'x', 1710000000, 1710003600, 'cli', 'openai', '/repo', 'title', 'workspace-write', 'on-request', 123, 1, ?)
+                    """,
+                    [("active", 0), ("archived", 1)],
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            rows = read_threads(db_path)
+            self.assertEqual([row.session_id for row in rows], ["active"])
+
+            all_rows = read_threads(db_path, include_archived=True)
+            self.assertEqual(sorted(row.session_id for row in all_rows), ["active", "archived"])
+
     def test_read_token_events(self) -> None:
         with self.subTest("jsonl"), tempfile_directory() as tmp_path:
             session_dir = tmp_path / "sessions" / "2026" / "03" / "15"

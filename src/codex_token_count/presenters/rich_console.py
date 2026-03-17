@@ -4,7 +4,9 @@ from datetime import datetime
 
 from rich.box import SIMPLE_HEAVY
 from rich.columns import Columns
+from rich.align import Align
 from rich.console import Console
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -26,15 +28,24 @@ def _fmt_int(value: object, compact: bool = False) -> str:
     if not compact:
         return f"{value:,}"
 
-    thresholds = [
-        (1_000_000_000, "B"),
-        (1_000_000, "M"),
-        (1_000, "K"),
-    ]
+    thresholds = [(1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")]
     for threshold, suffix in thresholds:
         if value >= threshold:
             return f"{value / threshold:.1f}{suffix}"
     return str(value)
+
+
+def _fmt_money(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "-"
+    return f"${value:.2f}"
+
+
+def _spark_bar(value: int, max_value: int, width: int = 18) -> str:
+    if value <= 0 or max_value <= 0:
+        return "·"
+    bar_length = max(1, round((value / max_value) * width))
+    return "█" * bar_length
 
 
 def _fmt_value(value: object) -> str:
@@ -44,21 +55,9 @@ def _fmt_value(value: object) -> str:
         return _fmt_datetime(value)
     if isinstance(value, int):
         return _fmt_int(value)
+    if isinstance(value, float):
+        return _fmt_money(value)
     return str(value)
-
-
-def _sparkline(values: list[int]) -> str:
-    if not values:
-        return ""
-    blocks = "▁▂▃▄▅▆▇█"
-    max_value = max(values)
-    if max_value <= 0:
-        return blocks[0] * len(values)
-    result: list[str] = []
-    for value in values:
-        index = round((value / max_value) * (len(blocks) - 1))
-        result.append(blocks[index])
-    return "".join(result)
 
 
 def _fmt_percent(numerator: int, denominator: int) -> str:
@@ -67,203 +66,147 @@ def _fmt_percent(numerator: int, denominator: int) -> str:
     return f"{(numerator / denominator) * 100:.1f}%"
 
 
-def _input_breakdown_rows(input_tokens: int, cached_input_tokens: int) -> list[tuple[str, str]]:
-    non_cached_input_tokens = max(input_tokens - cached_input_tokens, 0)
-    return [
-        ("Input Tokens", _fmt_value(input_tokens)),
-        (
-            "  - Cached Input",
-            f"{_fmt_value(cached_input_tokens)} ({_fmt_percent(cached_input_tokens, input_tokens)})",
-        ),
-        (
-            "  - Non-cached Input",
-            f"{_fmt_value(non_cached_input_tokens)} ({_fmt_percent(non_cached_input_tokens, input_tokens)})",
-        ),
-    ]
-
-
-def _output_breakdown_rows(output_tokens: int, reasoning_output_tokens: int) -> list[tuple[str, str]]:
-    non_reasoning_output_tokens = max(output_tokens - reasoning_output_tokens, 0)
-    return [
-        ("Output Tokens", _fmt_value(output_tokens)),
-        (
-            "  - Reasoning Output",
-            f"{_fmt_value(reasoning_output_tokens)} ({_fmt_percent(reasoning_output_tokens, output_tokens)})",
-        ),
-        (
-            "  - Non-reasoning Output",
-            f"{_fmt_value(non_reasoning_output_tokens)} ({_fmt_percent(non_reasoning_output_tokens, output_tokens)})",
-        ),
-    ]
-
-
-def _build_breakdown_panel(input_tokens: int, cached_input_tokens: int, output_tokens: int, reasoning_output_tokens: int) -> Panel:
+def _build_breakdown_panel(usage: dict[str, int]) -> Panel:
     breakdown = Table.grid(expand=True, padding=(0, 3))
     breakdown.add_column(style="bold cyan")
     breakdown.add_column(justify="right", style="magenta")
-    input_rows = _input_breakdown_rows(input_tokens, cached_input_tokens)
-    output_rows = _output_breakdown_rows(output_tokens, reasoning_output_tokens)
-    for label, value in input_rows:
-        breakdown.add_row(label, value)
+    breakdown.add_row("Input Tokens", _fmt_value(usage["input_tokens"]))
+    breakdown.add_row(
+        "  - Cached Input",
+        f"{_fmt_value(usage['cached_input_tokens'])} ({_fmt_percent(usage['cached_input_tokens'], usage['input_tokens'])})",
+    )
+    breakdown.add_row(
+        "  - Non-cached Input",
+        f"{_fmt_value(usage['non_cached_input_tokens'])} ({_fmt_percent(usage['non_cached_input_tokens'], usage['input_tokens'])})",
+    )
     breakdown.add_row("", "")
-    for label, value in output_rows:
-        breakdown.add_row(label, value)
+    breakdown.add_row("Output Tokens", _fmt_value(usage["output_tokens"]))
+    breakdown.add_row(
+        "  - Reasoning Output",
+        f"{_fmt_value(usage['reasoning_output_tokens'])} ({_fmt_percent(usage['reasoning_output_tokens'], usage['output_tokens'])})",
+    )
+    breakdown.add_row(
+        "  - Non-reasoning Output",
+        f"{_fmt_value(usage['non_reasoning_output_tokens'])} ({_fmt_percent(usage['non_reasoning_output_tokens'], usage['output_tokens'])})",
+    )
     return Panel(breakdown, title="Breakdown", box=SIMPLE_HEAVY)
 
 
-def print_summary_view(console: Console, summary: dict[str, object], trend_rows: list[dict[str, object]]) -> None:
-    kpis = [
-        ("Sessions", summary["total_sessions"], "cyan"),
-        ("Total Tokens", summary["total_tokens"], "magenta"),
-        (f"{summary['window_days']}-Day Tokens", summary["tokens_in_window"], "yellow"),
-        ("30-Day Tokens", summary["tokens_last_30_days"], "green"),
-    ]
-    panels = [
-        Panel.fit(
-            Text.from_markup(f"[bold {color}]{_fmt_int(value, compact=True)}[/bold {color}]\n[dim]{label}[/dim]"),
-            box=SIMPLE_HEAVY,
-            padding=(1, 2),
-        )
-        for label, value, color in kpis
-    ]
-    console.print(Columns(panels, equal=True, expand=True))
+def print_summary_view(console: Console, payload: dict[str, object]) -> None:
+    console.print(Padding(Align.center(Text("Usage Summary", style="bold")), (1, 0, 1, 0)))
 
-    last_updated = summary.get("last_updated_at")
-    trend_values = [int(row["tokens"]) for row in trend_rows]
-    trend_table = Table(box=SIMPLE_HEAVY, expand=True)
+    cards = [
+        ("Sessions", payload["sessions"], "cyan"),
+        ("Total Tokens", payload["usage"]["total_tokens"], "magenta"),
+        ("7-Day Tokens", payload["tokens_last_7_days"], "yellow"),
+        ("30-Day Tokens", payload["tokens_last_30_days"], "green"),
+    ]
+    if payload.get("cost") is not None:
+        cards.append(("Estimated Cost", payload["cost"]["total_cost_usd"], "green"))
+
+    kpi_grid = Table.grid(expand=False, padding=(0, 8))
+    for _ in cards:
+        kpi_grid.add_column(justify="left")
+    kpi_grid.add_row(
+        *[
+            Text.from_markup(
+                f"[bold {color}]{_fmt_money(value) if isinstance(value, float) else _fmt_int(value, compact=True)}[/bold {color}]\n[dim]{label}[/dim]"
+            )
+            for label, value, color in cards
+        ]
+    )
+    console.print(Padding(Align.center(kpi_grid), (1, 0, 1, 0)))
+
+    trend_rows = payload["trend_rows"]
+    title = Text("7-Day Usage", style="bold")
+    trend_table = Table(title=title, title_justify="center", box=SIMPLE_HEAVY, header_style="bold", expand=True, pad_edge=True)
     trend_table.add_column("Date", style="bold")
     trend_table.add_column("Tokens", justify="right", style="magenta")
     trend_table.add_column("Bar", style="cyan")
-    max_value = max(trend_values, default=0)
-    for row in trend_rows:
-        value = int(row["tokens"])
-        bar_length = 1 if max_value == 0 else max(1, round((value / max_value) * 18))
-        trend_table.add_row(
+    max_value = max((row["usage"]["total_tokens"] for row in trend_rows), default=0)
+    for row in reversed(trend_rows):
+        value = int(row["usage"]["total_tokens"])
+        trend_table.add_row(str(row["date"]), _fmt_int(value), _spark_bar(value, max_value))
+    console.print(Padding(trend_table, (1, 1, 0, 1)))
+    updated_text = Text(f"Last updated {_fmt_datetime(payload.get('last_updated_at'))}")
+    console.print(Padding(updated_text, (1, 0, 1, 0)), justify="center")
+
+
+def print_trend_view(console: Console, payload: dict[str, object]) -> None:
+    title = Text(f"Trend / {payload['days']}-Day Usage", style="bold")
+    table = Table(title=title, title_justify="center", box=SIMPLE_HEAVY, header_style="bold", expand=True, pad_edge=True)
+    table.add_column("Date")
+    table.add_column("Tokens", justify="right", style="magenta")
+    table.add_column("Bar", style="cyan")
+    if payload["rows"] and payload["rows"][0].get("cost") is not None:
+        table.add_column("Cost", justify="right", style="green")
+
+    max_value = max((row["usage"]["total_tokens"] for row in payload["rows"]), default=0)
+    for row in reversed(payload["rows"]):
+        usage = row["usage"]
+        rendered = [
             str(row["date"]),
-            _fmt_int(value),
-            "█" * bar_length if value > 0 else "·",
-        )
-
-    console.print(
-        Panel(
-            trend_table,
-            title="Usage Summary",
-            subtitle=f"Last updated {_fmt_datetime(last_updated)}",
-            box=SIMPLE_HEAVY,
-        )
-    )
-    console.print(
-        _build_breakdown_panel(
-            int(summary["input_tokens"]),
-            int(summary["cached_input_tokens"]),
-            int(summary["output_tokens"]),
-            int(summary["reasoning_output_tokens"]),
-        )
-    )
-
-
-def print_rows_table(
-    console: Console,
-    rows: list[dict[str, object]],
-    columns: list[tuple[str, str]],
-    *,
-    title: str | None = None,
-) -> None:
-    table = Table(title=title, box=SIMPLE_HEAVY, header_style="bold cyan", expand=True)
-    numeric_keys = {"tokens_used", "sessions", "tokens", "total_tokens", "delta_tokens", "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens"}
-    for key, header in columns:
-        justify = "right" if key in numeric_keys else "left"
-        overflow = "fold" if key in {"title", "cwd"} else "ellipsis"
-        style = "magenta" if "token" in key else None
-        table.add_column(header, justify=justify, overflow=overflow, style=style)
-
-    for row in rows:
-        rendered = [_fmt_value(row.get(key)) for key, _ in columns]
+            _fmt_int(usage["total_tokens"]),
+            _spark_bar(int(usage["total_tokens"]), max_value),
+        ]
+        if row.get("cost") is not None:
+            rendered.append(_fmt_money(row["cost"]["total_cost_usd"]))
         table.add_row(*rendered)
 
+    console.print(Padding(table, (1, 1, 0, 1)))
+
+
+def print_project_list_view(console: Console, payload: dict[str, object]) -> None:
+    table = Table(title="Projects", box=SIMPLE_HEAVY, header_style="bold cyan", expand=True)
+    table.add_column("Project")
+    table.add_column("Sessions", justify="right")
+    table.add_column("Tokens", justify="right", style="magenta")
+    table.add_column("Updated", justify="left")
+    show_cost = any(row.get("cost") is not None for row in payload["rows"])
+    if show_cost:
+        table.add_column("Cost", justify="right", style="green")
+
+    for row in payload["rows"]:
+        rendered = [
+            str(row["project_name"]),
+            _fmt_int(row["sessions"]),
+            _fmt_int(row["usage"]["total_tokens"]),
+            _fmt_datetime(row["last_updated_at"]),
+        ]
+        if show_cost:
+            rendered.append(_fmt_money(row["cost"]["total_cost_usd"]) if row.get("cost") is not None else "-")
+        table.add_row(*rendered)
     console.print(table)
 
 
-def print_project_view(
-    console: Console,
-    path: str,
-    summary: dict[str, object],
-    usage: dict[str, int],
-    rows: list[dict[str, object]],
-) -> None:
-    meta = Table.grid(padding=(0, 2))
-    meta.add_column(style="bold cyan")
-    meta.add_column()
-    meta.add_row("Project", path)
-    meta.add_row("Sessions", _fmt_value(summary["total_sessions"]))
-    meta.add_row("Total tokens", _fmt_value(summary["total_tokens"]))
-    meta.add_row("Last updated", _fmt_datetime(summary["last_updated_at"]))
-    console.print(Panel(meta, title="Project Detail", box=SIMPLE_HEAVY))
-    console.print(
-        _build_breakdown_panel(
-            usage["input_tokens"],
-            usage["cached_input_tokens"],
-            usage["output_tokens"],
-            usage["reasoning_output_tokens"],
-        )
+def print_project_detail_view(console: Console, payload: dict[str, object]) -> None:
+    project = payload["project"]
+    cost = payload.get("cost")
+    title = Text("Project Detail", style="bold")
+    title.append(" - ", style="bold")
+    title.append(str(project["project_name"]), style="bold cyan")
+    console.print(Padding(Align.center(title), (1, 0, 1, 0)))
+
+    cards = [
+        ("Sessions", project["sessions"], "cyan"),
+        ("Total Tokens", payload["usage"]["total_tokens"], "magenta"),
+    ]
+    if cost is not None:
+        cards.append(("Estimated Cost", cost["total_cost_usd"], "green"))
+
+    card_grid = Table.grid(expand=False, padding=(0, 8))
+    for _ in cards:
+        card_grid.add_column(justify="left")
+    card_grid.add_row(
+        *[
+            Text.from_markup(
+                f"[bold {color}]{_fmt_money(value) if isinstance(value, float) else _fmt_int(value, compact=True)}[/bold {color}]\n[dim]{label}[/dim]"
+            )
+            for label, value, color in cards
+        ]
     )
-    if rows:
-        print_rows_table(
-            console,
-            rows,
-            [
-                ("session_id", "Session ID"),
-                ("tokens_used", "Tokens"),
-                ("updated_at", "Updated At"),
-                ("title", "Title"),
-            ],
-            title="Sessions",
-        )
+    console.print(Padding(Align.center(card_grid), (1, 0, 1, 0)))
 
-
-def print_session_view(
-    console: Console,
-    session: dict[str, object],
-    usage: dict[str, int],
-    event_rows: list[dict[str, object]],
-    event_count: int,
-) -> None:
-    meta = Table.grid(padding=(0, 2))
-    meta.add_column(style="bold cyan")
-    meta.add_column()
-    meta.add_row("Session ID", str(session["session_id"]))
-    meta.add_row("Title", str(session["title"]))
-    meta.add_row("CWD", str(session["cwd"]))
-    meta.add_row("Model", str(session["model_provider"]))
-    meta.add_row("Created", _fmt_datetime(session["created_at"]))
-    meta.add_row("Updated", _fmt_datetime(session["updated_at"]))
-    meta.add_row("Tokens", _fmt_value(session["tokens_used"]))
-    meta.add_row("Events", _fmt_int(event_count))
-    console.print(Panel(meta, title="Session Detail", box=SIMPLE_HEAVY))
-    console.print(
-        _build_breakdown_panel(
-            usage["input_tokens"],
-            usage["cached_input_tokens"],
-            usage["output_tokens"],
-            usage["reasoning_output_tokens"],
-        )
-    )
-    if event_rows:
-        print_rows_table(
-            console,
-            event_rows,
-            [
-                ("timestamp", "Timestamp"),
-                ("total_tokens", "Total"),
-                ("delta_tokens", "Delta"),
-                ("input_tokens", "Input"),
-                ("cached_input_tokens", "Cached"),
-                ("output_tokens", "Output"),
-                ("reasoning_output_tokens", "Reasoning"),
-            ],
-            title="Recent Token Events",
-        )
-
-
-def print_trend_view(console: Console, rows: list[dict[str, object]]) -> None:
-    print_rows_table(console, rows, [("date", "Date"), ("tokens", "Tokens")], title="Daily Trend")
+    console.print(Padding(_build_breakdown_panel(payload["usage"]), (1, 1, 0, 1)))
+    updated_text = Text(f"Last updated {_fmt_datetime(project['last_updated_at'])}")
+    console.print(Padding(updated_text, (1, 0, 1, 0)), justify="center")

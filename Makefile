@@ -1,7 +1,7 @@
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 
-.PHONY: install test smoke smoke-project smoke-session
+.PHONY: install test smoke smoke-trend smoke-projects
 
 install:
 	$(PIP) install -e .
@@ -12,8 +12,8 @@ test:
 smoke:
 	codex-token summary
 
-smoke-project:
-	codex-token project $(PWD)
+smoke-trend:
+	codex-token trend
 
-smoke-session:
-	codex-token session 019cf082 --events 3
+smoke-projects:
+	codex-token project
