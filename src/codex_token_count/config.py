@@ -36,6 +36,9 @@ def find_config_file(start_dir: str | Path | None = None) -> Path | None:
         candidate = directory / CONFIG_FILE_NAME
         if candidate.is_file():
             return candidate
+    for candidate in _fallback_config_candidates():
+        if candidate.is_file():
+            return candidate
     return None
 
 
@@ -112,3 +115,8 @@ def _bool_value(value: object, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     return default
+
+
+def _fallback_config_candidates() -> tuple[Path, ...]:
+    project_root = Path(__file__).resolve().parents[2]
+    return (project_root / CONFIG_FILE_NAME,)

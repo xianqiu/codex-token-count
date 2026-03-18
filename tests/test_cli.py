@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from codex_token_count.cli import main
 
@@ -116,6 +117,20 @@ class CliTests(unittest.TestCase):
             payload = json.loads(output)
             self.assertEqual(payload["sessions"], 4)
             self.assertEqual(payload["usage"]["total_tokens"], 98)
+
+    def test_summary_can_use_fallback_config_outside_project_dir(self) -> None:
+        with tempfile_directory() as tmp_path:
+            config_home = tmp_path / "config-home"
+            work_dir = tmp_path / "elsewhere"
+            build_codex_fixture(config_home / ".codex")
+            write_config(config_home)
+            work_dir.mkdir()
+            with patch("codex_token_count.config._fallback_config_candidates", return_value=(config_home / ".codex-token.toml",)):
+                output = run_cli(work_dir, "--json", "summary")
+            payload = json.loads(output)
+            self.assertEqual(payload["scope"], "summary")
+            self.assertIsNotNone(payload["cost"])
+            self.assertEqual(payload["sessions"], 3)
 
 
 def run_cli(project_dir: Path, *args: str) -> str:

@@ -47,7 +47,7 @@ output_per_million_usd = 15.0
 
 默认情况下：
 
-- 配置文件从当前目录向上查找最近的一份
+- 配置文件先从当前目录向上查找最近的一份；找不到时回退到 `codex-token-count` 项目根目录下的 `.codex-token.toml`
 - `pricing` 未配置时，不显示费用
 - `include_archived = false` 时，不统计 archived session
 

@@ -10,7 +10,7 @@
 
 ## Configuration
 
-CLI 读取当前目录向上最近的一份 `.codex-token.toml`。
+CLI 优先读取当前目录向上最近的一份 `.codex-token.toml`；如果找不到，会回退到 `codex-token-count` 项目根目录下的 `.codex-token.toml`。
 
 示例：
 
