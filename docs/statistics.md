@@ -1,6 +1,6 @@
 # Statistics Semantics
 
-本文档定义 `codex-token-count` 当前版本的统计口径。
+本文档定义 `codex-token` 当前版本的统计口径。
 
 ## Scope
 

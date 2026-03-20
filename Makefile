@@ -7,4 +7,4 @@ install:
 	$(PIP) install -e .
 
 uninstall:
-	$(PIP) uninstall -y codex-token-count
+	$(PIP) uninstall -y codex-token

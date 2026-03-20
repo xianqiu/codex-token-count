@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import unittest
 
-from codex_token_count.analytics import (
+from codex_token.analytics import (
     build_daily_trend,
     build_project_detail,
     build_project_list,
@@ -13,8 +13,8 @@ from codex_token_count.analytics import (
     usage_from_events,
     usage_from_session_events,
 )
-from codex_token_count.config import PricingConfig
-from codex_token_count.models import ThreadRecord, TokenEvent
+from codex_token.config import PricingConfig
+from codex_token.models import ThreadRecord, TokenEvent
 
 
 def ts(value: str) -> datetime:

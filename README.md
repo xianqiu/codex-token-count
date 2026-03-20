@@ -1,6 +1,6 @@
-# codex-token-count
+# codex-token
 
-`codex-token-count` 是一个本地 CLI，用来查看本机 Codex 的 token 使用情况。
+`codex-token` 是一个本地 CLI，用来查看本机 Codex 的 token 使用情况。
 
 它提供三类信息：
 
@@ -38,7 +38,7 @@ make uninstall
 如果你没有使用 `make`，也可以直接执行：
 
 ```bash
-python3 -m pip uninstall codex-token-count
+python3 -m pip uninstall codex-token
 ```
 
 如需自定义默认行为，在项目目录或其父目录放置 `.codex-token.toml`：
@@ -60,7 +60,7 @@ output_per_million_usd = 15.0
 
 默认情况下：
 
-- 配置文件先从当前目录向上查找最近的一份；找不到时回退到 `codex-token-count` 项目根目录下的 `.codex-token.toml`
+- 配置文件先从当前目录向上查找最近的一份；找不到时回退到 `codex-token` 项目根目录下的 `.codex-token.toml`
 - `pricing` 未配置时，不显示费用
 - `include_archived = false` 时，不统计 archived session
 

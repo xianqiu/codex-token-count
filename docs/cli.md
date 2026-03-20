@@ -1,6 +1,6 @@
 # CLI Usage
 
-`codex-token-count` 用来查看本机 Codex 的 token 使用情况。
+`codex-token` 用来查看本机 Codex 的 token 使用情况。
 
 支持三类查询：
 
@@ -10,7 +10,7 @@
 
 ## Configuration
 
-CLI 优先读取当前目录向上最近的一份 `.codex-token.toml`；如果找不到，会回退到 `codex-token-count` 项目根目录下的 `.codex-token.toml`。
+CLI 优先读取当前目录向上最近的一份 `.codex-token.toml`；如果找不到，会回退到 `codex-token` 项目根目录下的 `.codex-token.toml`。
 
 示例：
 

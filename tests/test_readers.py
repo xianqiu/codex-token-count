@@ -4,8 +4,8 @@ from pathlib import Path
 import sqlite3
 import unittest
 
-from codex_token_count.datasource.session_jsonl_reader import read_token_events
-from codex_token_count.datasource.sqlite_reader import read_threads
+from codex_token.datasource.session_jsonl_reader import read_token_events
+from codex_token.datasource.sqlite_reader import read_threads
 
 
 class ReaderTests(unittest.TestCase):

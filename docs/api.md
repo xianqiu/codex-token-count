@@ -1,6 +1,6 @@
 # JSON API
 
-本文档定义 `codex-token-count --json` 的返回结构。
+本文档定义 `codex-token --json` 的返回结构。
 
 约束：
 

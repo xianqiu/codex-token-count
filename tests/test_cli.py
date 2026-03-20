@@ -9,7 +9,7 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
-from codex_token_count.cli import main
+from codex_token.cli import main
 
 
 class CliTests(unittest.TestCase):
@@ -144,7 +144,7 @@ class CliTests(unittest.TestCase):
             build_codex_fixture(config_home / ".codex")
             write_config(config_home)
             work_dir.mkdir()
-            with patch("codex_token_count.config._fallback_config_candidates", return_value=(config_home / ".codex-token.toml",)):
+            with patch("codex_token.config._fallback_config_candidates", return_value=(config_home / ".codex-token.toml",)):
                 output = run_cli(work_dir, "--json", "summary")
             payload = json.loads(output)
             self.assertEqual(payload["scope"], "summary")
