@@ -1,10 +1,18 @@
-PYTHON ?= python3
-PIP ?= $(PYTHON) -m pip
+UV ?= uv
 
-.PHONY: install uninstall
+.PHONY: install uninstall run test lock
 
 install:
-	$(PIP) install -e .
+	$(UV) tool install .
 
 uninstall:
-	$(PIP) uninstall -y codex-token
+	$(UV) tool uninstall codex-token
+
+run:
+	codex-token
+
+test:
+	$(UV) run python -m unittest discover -s tests
+
+lock:
+	$(UV) lock

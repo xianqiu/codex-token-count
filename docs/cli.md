@@ -8,6 +8,26 @@
 - 最近 N 天趋势
 - 项目排行和单项目详情
 
+## Install
+
+全局安装：
+
+```bash
+make install
+```
+
+卸载：
+
+```bash
+make uninstall
+```
+
+如果安装后提示 `codex-token: command not found`，确保你的 shell 配置里有：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 ## Configuration
 
 CLI 优先读取当前目录向上最近的一份 `.codex-token.toml`；如果找不到，会回退到 `codex-token` 项目根目录下的 `.codex-token.toml`。

@@ -18,27 +18,39 @@
 
 ## Quick Start
 
+全局安装命令：
+
 ```bash
 make install
 ```
 
-安装完成后，可以直接运行：
+如果安装后提示 `codex-token: command not found`，说明 `uv` 的工具目录还没进 `PATH`。确保你的 shell 配置里有：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+安装完成后，直接运行：
 
 ```bash
 codex-token
 codex-token summary
 ```
 
-如需卸载命令：
+卸载：
 
 ```bash
 make uninstall
 ```
 
-如果你没有使用 `make`，也可以直接执行：
+## Development
+
+项目使用 `uv` 管理依赖，CLI 入口定义在 `pyproject.toml`。如需更新锁文件或运行本地测试：
 
 ```bash
-python3 -m pip uninstall codex-token
+uv lock
+uv sync
+uv run python -m unittest discover -s tests
 ```
 
 如需自定义默认行为，在项目目录或其父目录放置 `.codex-token.toml`：
