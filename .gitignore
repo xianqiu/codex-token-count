@@ -19,6 +19,7 @@ dist/
 .venv/
 venv/
 env/
+.python-version
 
 # Local editor/system files
 .DS_Store
